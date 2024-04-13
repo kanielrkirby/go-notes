@@ -167,9 +167,15 @@ func updateList(m Model, msg tea.Msg) (tea.Model, tea.Cmd) {
             }
 
 		case key.Matches(msg, ListKeyMap.Delete):
-			if len(m.choices) > 0 {
-				m.choices = append(m.choices[:m.choiceIndex], m.choices[m.choiceIndex+1:]...)
+			if len(m.choices) < 1 {
+                break
 			}
+
+            m.choices = append(m.choices[:m.choiceIndex], m.choices[m.choiceIndex+1:]...)
+
+            if m.choiceIndex >= len(m.choices) {
+                m.choiceIndex = len(m.choices) - 1
+            }
 
 		case key.Matches(msg, ListKeyMap.Exit):
 			return m, tea.Quit
