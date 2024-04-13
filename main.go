@@ -4,27 +4,29 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	li "github.com/charmbracelet/lipgloss"
 )
 
-var c = map[string]lipgloss.Color{
-	"primary":          lipgloss.Color("#F4442E"),
-	"primary-light":    lipgloss.Color("#FC9E4F"),
-	"primary-lighter":  lipgloss.Color("#EDD382"),
-	"primary-lightest": lipgloss.Color("#F2F3AE"),
-	"black":            lipgloss.Color("#020122"),
-	"white":            lipgloss.Color("#FEFEF7"),
+var c = map[string]li.Color{
+	"primary":          li.Color("#F4442E"),
+	"primary-light":    li.Color("#FC9E4F"),
+	"primary-lighter":  li.Color("#EDD382"),
+	"primary-lightest": li.Color("#F2F3AE"),
+	"black":            li.Color("#020122"),
+	"white":            li.Color("#FEFEF7"),
 }
 
 var (
-	listItemTitle            = lipgloss.NewStyle().MarginLeft(1).PaddingLeft(1).Bold(true).Foreground(c["white"]).Border(lipgloss.HiddenBorder(), false, false, false, true)
-	listItemSubtitle         = lipgloss.NewStyle().MarginLeft(1).MarginBottom(1).PaddingLeft(1).Foreground(c["white"]).Faint(true).Border(lipgloss.HiddenBorder(), false, false, false, true)
-	listItemSelectedTitle    = lipgloss.NewStyle().MarginLeft(1).PaddingLeft(1).Bold(true).Foreground(c["primary-light"]).Border(lipgloss.ThickBorder(), false, false, false, true).BorderForeground(c["primary-light"])
-	listItemSelectedSubtitle = lipgloss.NewStyle().MarginLeft(1).MarginBottom(1).PaddingLeft(1).Foreground(c["primary-light"]).Faint(true).Border(lipgloss.ThickBorder(), false, false, false, true).BorderForeground(c["primary-light"])
+	listItemTitle            = li.NewStyle().MarginLeft(1).PaddingLeft(1).Bold(true).Foreground(c["white"]).Border(li.HiddenBorder(), false, false, false, true)
+	listItemSubtitle         = li.NewStyle().MarginLeft(1).MarginBottom(1).PaddingLeft(1).Foreground(c["white"]).Faint(true).Border(li.HiddenBorder(), false, false, false, true)
+	listItemSelectedTitle    = li.NewStyle().MarginLeft(1).PaddingLeft(1).Bold(true).Foreground(c["primary-light"]).Border(li.ThickBorder(), false, false, false, true).BorderForeground(c["primary-light"])
+	listItemSelectedSubtitle = li.NewStyle().MarginLeft(1).MarginBottom(1).PaddingLeft(1).Foreground(c["primary-light"]).Faint(true).Border(li.ThickBorder(), false, false, false, true).BorderForeground(c["primary-light"])
 )
 
 type Choice struct {
@@ -32,24 +34,30 @@ type Choice struct {
 	Subtitle string
 }
 
-type model struct {
+type Model struct {
 	viewport    viewport.Model
 	textinput   textinput.Model
 	textarea    textarea.Model
 	choices     []Choice
 	choiceIndex int
 	noteIndex   int
+	help        help.Model
 }
 
-func initialModel() model {
+func initialModel() Model {
 	ti := textinput.New()
 	ti.Placeholder = "Untitled"
 	ti.CharLimit = 30
+    ti.Width = 30
+    ti.TextStyle = li.NewStyle().Bold(true)
+    ti.Prompt = "# "
+    ti.PromptStyle = li.NewStyle().Bold(true).Faint(true)
 
 	ta := textarea.New()
 	ta.Placeholder = "Type a note!"
+    ta.SetWidth(40)
 
-	return model{
+	return Model{
 		choices: []Choice{
 			{Title: "1", Subtitle: ""},
 			{Title: "2", Subtitle: ""},
@@ -60,10 +68,11 @@ func initialModel() model {
 		noteIndex:   -1,
 		textinput:   ti,
 		textarea:    ta,
+		help:        help.New(),
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	if m.textarea.Focused() {
 		return textarea.Blink
 	}
@@ -74,31 +83,7 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
-func viewList(m model) string {
-	str := "\n"
-
-	for i, choice := range m.choices {
-		title := choice.Title
-		if title == "" {
-			title = "Untitled"
-		}
-		subtitle := choice.Subtitle
-		if subtitle == "" {
-			subtitle = "Write a note!"
-		}
-
-		if m.choiceIndex == i {
-			str += listItemSelectedTitle.Render(title) + "\n"
-			str += listItemSelectedSubtitle.Render(subtitle) + "\n"
-		} else {
-			str += listItemTitle.Render(title) + "\n"
-			str += listItemSubtitle.Render(subtitle) + "\n"
-		}
-	}
-	return str
-}
-
-func updateFields(m model, msg tea.Msg) (model, []tea.Cmd) {
+func updateFields(m Model, msg tea.Msg) (Model, []tea.Cmd) {
 	cmds := []tea.Cmd{}
 	var textinputCmd tea.Cmd
 	var textareaCmd tea.Cmd
@@ -110,13 +95,13 @@ func updateFields(m model, msg tea.Msg) (model, []tea.Cmd) {
 	return m, cmds
 }
 
-func updateNote(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
+func updateNote(m Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := []tea.Cmd{}
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.Type.String() {
-		case tea.KeyTab.String():
+		switch {
+		case key.Matches(msg, NoteKeyMap.Next):
 			if m.textinput.Focused() {
 				m.textinput.Blur()
 				m.textarea.Focus()
@@ -124,9 +109,13 @@ func updateNote(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textarea.Blur()
 				m.textinput.Focus()
 			}
-		case tea.KeyCtrlC.String():
-			return m, tea.Quit
-		case tea.KeyEnter.String():
+		case key.Matches(msg, NoteKeyMap.Cancel):
+			m.textinput.Blur()
+			m.textarea.Blur()
+			m.textinput.SetValue("")
+			m.textarea.SetValue("")
+			m.noteIndex = -1
+		case key.Matches(msg, NoteKeyMap.Save):
 			m.noteIndex = -1
 			m.textinput.Blur()
 			m.textarea.Blur()
@@ -144,43 +133,42 @@ func updateNote(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func updateList(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
+func updateList(m Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-		switch msg.String() {
-
-		case tea.KeyCtrlC.String(), "q":
-			return m, tea.Quit
-
-		case tea.KeyUp.String(), "k", tea.KeyShiftTab.String():
-			if m.choiceIndex > 0 {
-				m.choiceIndex--
-			} else {
-				m.choiceIndex = len(m.choices) - 1
-			}
-
-		case tea.KeyShiftTab.String(), "j", tea.KeyTab.String():
+		switch {
+		case key.Matches(msg, ListKeyMap.Next):
 			if m.choiceIndex < len(m.choices)-1 {
 				m.choiceIndex++
 			} else {
 				m.choiceIndex = 0
 			}
 
-		case tea.KeyEnter.String(), tea.KeySpace.String(), "l":
+		case key.Matches(msg, ListKeyMap.Prev):
+			if m.choiceIndex > 0 {
+				m.choiceIndex--
+			} else {
+				m.choiceIndex = len(m.choices) - 1
+			}
+
+		case key.Matches(msg, ListKeyMap.Open):
 			m.noteIndex = m.choiceIndex
 			m.textinput.SetValue(m.choices[m.noteIndex].Title)
 			m.textarea.SetValue(m.choices[m.noteIndex].Subtitle)
 			m.textinput.Focus()
 
-		case "n":
-            m.choices = append(m.choices[:m.choiceIndex+1], append([]Choice{{Title: "", Subtitle: ""}}, m.choices[m.choiceIndex+1:]...)...)
+		case key.Matches(msg, ListKeyMap.New):
+			m.choices = append(m.choices[:m.choiceIndex+1], append([]Choice{{Title: "", Subtitle: ""}}, m.choices[m.choiceIndex+1:]...)...)
 			m.choiceIndex++
 
-		case "d":
+		case key.Matches(msg, ListKeyMap.Delete):
 			if len(m.choices) > 0 {
 				m.choices = append(m.choices[:m.choiceIndex], m.choices[m.choiceIndex+1:]...)
 			}
+
+		case key.Matches(msg, ListKeyMap.Exit):
+			return m, tea.Quit
 		}
 
 	case tea.WindowSizeMsg:
@@ -196,7 +184,7 @@ func updateList(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.noteIndex < 0 {
 		return updateList(m, msg)
 	} else {
@@ -204,14 +192,46 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func viewNote(m model) string {
-	str := ""
-	str += m.textinput.View() + "\n"
-	str += m.textarea.View() + "\n"
-	return lipgloss.PlaceVertical(m.viewport.Height, lipgloss.Center, lipgloss.PlaceHorizontal(m.viewport.Width, lipgloss.Center, str))
+func viewList(m Model) string {
+	str := "\n"
+
+	for i, choice := range m.choices {
+		renderedTitle := choice.Title
+		if renderedTitle == "" {
+			renderedTitle = "Untitled"
+		}
+		renderedSubtitle := choice.Subtitle
+		if renderedSubtitle == "" {
+			renderedSubtitle = "Write a note!"
+		}
+
+		if m.choiceIndex == i {
+			str += listItemSelectedTitle.Render(renderedTitle) + "\n"
+			str += listItemSelectedSubtitle.Render(renderedSubtitle) + "\n"
+		} else {
+			str += listItemTitle.Render(renderedTitle) + "\n"
+			str += listItemSubtitle.Render(renderedSubtitle) + "\n"
+		}
+	}
+    str = li.NewStyle().Height(m.viewport.Height).Render(str)
+    helpStr := li.NewStyle().Width(m.viewport.Width).Render(m.help.FullHelpView(ListKeyMap.FullHelp()))
+    str = li.JoinHorizontal(li.Bottom, str, helpStr)
+    return str
 }
 
-func (m model) View() string {
+func viewNote(m Model) string {
+	str := ""
+	str += m.textinput.View() + "\n\n\n"
+    str1_5 := m.textarea.View() + "\n"
+    str += str1_5
+    helpStr := li.NewStyle().Width(m.viewport.Width).Render(m.help.FullHelpView(NoteKeyMap.FullHelp()))
+    str = li.PlaceHorizontal(m.viewport.Width, li.Center, str)
+	str = li.PlaceVertical(m.viewport.Height, li.Center, str)
+    str = li.JoinVertical(li.Bottom, str, helpStr)
+    return str
+}
+
+func (m Model) View() string {
 	if m.noteIndex < 0 {
 		return viewList(m)
 	} else {
@@ -219,8 +239,8 @@ func (m model) View() string {
 	}
 }
 
-func alasView(m model) string {
-	str := lipgloss.NewStyle().Padding(2, 5).Background(lipgloss.Color("#333333")).Foreground(lipgloss.Color("#FF0000")).Bold(true).Render("Alas, something has gone amuck!")
+func alasView(m Model) string {
+	str := li.NewStyle().Padding(2, 5).Background(li.Color("#333333")).Foreground(li.Color("#FF0000")).Bold(true).Render("Alas, something has gone amuck!")
 	return str
 }
 
