@@ -159,8 +159,12 @@ func updateList(m Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textinput.Focus()
 
 		case key.Matches(msg, ListKeyMap.New):
-			m.choices = append(m.choices[:m.choiceIndex+1], append([]Choice{{Title: "", Subtitle: ""}}, m.choices[m.choiceIndex+1:]...)...)
-			m.choiceIndex++
+            if len(m.choices) > 0 {
+    			m.choices = append(m.choices[:m.choiceIndex+1], append([]Choice{{Title: "", Subtitle: ""}}, m.choices[m.choiceIndex+1:]...)...)
+    			m.choiceIndex++
+            } else {
+                m.choices = append(m.choices, Choice{Title: "", Subtitle: ""})
+            }
 
 		case key.Matches(msg, ListKeyMap.Delete):
 			if len(m.choices) > 0 {
