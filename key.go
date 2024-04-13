@@ -10,6 +10,7 @@ type ListKeyMapT struct {
 	Open   key.Binding
 	New    key.Binding
 	Delete key.Binding
+    Select key.Binding
 	Exit   key.Binding
 }
 
@@ -41,6 +42,10 @@ var ListKeyMap = ListKeyMapT{
 		key.WithKeys("d"),
 		key.WithHelp("d", "delete"),
 	),
+    Select: key.NewBinding(
+        key.WithKeys("v", "shift+v", "ctrl+v", "ctrl+shift+v"),
+        key.WithHelp("v", "enter select mode"),
+    ),
 	Exit: key.NewBinding(
 		key.WithKeys("ctrl+c", "q", "escape"),
 		key.WithHelp("ctrl+c/q/escape", "exit"),

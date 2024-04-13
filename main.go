@@ -23,10 +23,14 @@ var c = map[string]li.Color{
 }
 
 var (
-	listItemTitle            = li.NewStyle().MarginLeft(1).PaddingLeft(1).Bold(true).Foreground(c["white"]).Border(li.HiddenBorder(), false, false, false, true)
-	listItemSubtitle         = li.NewStyle().MarginLeft(1).MarginBottom(1).PaddingLeft(1).Foreground(c["white"]).Faint(true).Border(li.HiddenBorder(), false, false, false, true)
-	listItemSelectedTitle    = li.NewStyle().MarginLeft(1).PaddingLeft(1).Bold(true).Foreground(c["primary-light"]).Border(li.ThickBorder(), false, false, false, true).BorderForeground(c["primary-light"])
-	listItemSelectedSubtitle = li.NewStyle().MarginLeft(1).MarginBottom(1).PaddingLeft(1).Foreground(c["primary-light"]).Faint(true).Border(li.ThickBorder(), false, false, false, true).BorderForeground(c["primary-light"])
+	listItemTitle                     = li.NewStyle().MarginLeft(1).PaddingLeft(1).Bold(true).Foreground(c["white"]).Border(li.HiddenBorder(), false, false, false, true)
+	listItemSubtitle                  = li.NewStyle().MarginLeft(1).MarginBottom(1).PaddingLeft(1).Foreground(c["white"]).Faint(true).Border(li.HiddenBorder(), false, false, false, true)
+	listItemSelectedTitle             = li.NewStyle().MarginLeft(1).PaddingLeft(1).Bold(true).Foreground(c["primary-light"]).Border(li.ThickBorder(), false, false, false, true).BorderForeground(c["primary-light"])
+	listItemSelectedSubtitle          = li.NewStyle().MarginLeft(1).MarginBottom(1).PaddingLeft(1).Foreground(c["primary-light"]).Faint(true).Border(li.ThickBorder(), false, false, false, true).BorderForeground(c["primary-light"])
+	listItemHighlightTitle            = li.NewStyle().MarginLeft(1).Background(li.Color("#555555")).PaddingLeft(1).Bold(true).Foreground(c["white"]).Border(li.HiddenBorder(), false, false, false, true)
+	listItemHighlightSubtitle         = li.NewStyle().MarginLeft(1).Background(li.Color("#555555")).MarginBottom(1).PaddingLeft(1).Foreground(c["white"]).Faint(true).Border(li.HiddenBorder(), false, false, false, true)
+	listItemHighlightSelectedTitle    = li.NewStyle().MarginLeft(1).Background(li.Color("#555555")).PaddingLeft(1).Bold(true).Foreground(c["primary-light"]).Border(li.ThickBorder(), false, false, false, true).BorderForeground(c["primary-light"])
+	listItemHighlightSelectedSubtitle = li.NewStyle().MarginLeft(1).Background(li.Color("#555555")).MarginBottom(1).PaddingLeft(1).Foreground(c["primary-light"]).Faint(true).Border(li.ThickBorder(), false, false, false, true).BorderForeground(c["primary-light"])
 )
 
 type Choice struct {
@@ -42,20 +46,21 @@ type Model struct {
 	choiceIndex int
 	noteIndex   int
 	help        help.Model
+	selectIndex int
 }
 
 func initialModel() Model {
 	ti := textinput.New()
 	ti.Placeholder = "Untitled"
 	ti.CharLimit = 30
-    ti.Width = 30
-    ti.TextStyle = li.NewStyle().Bold(true)
-    ti.Prompt = "# "
-    ti.PromptStyle = li.NewStyle().Bold(true).Faint(true)
+	ti.Width = 30
+	ti.TextStyle = li.NewStyle().Bold(true)
+	ti.Prompt = "# "
+	ti.PromptStyle = li.NewStyle().Bold(true).Faint(true)
 
 	ta := textarea.New()
 	ta.Placeholder = "Type a note!"
-    ta.SetWidth(40)
+	ta.SetWidth(40)
 
 	return Model{
 		choices: []Choice{
@@ -69,6 +74,7 @@ func initialModel() Model {
 		textinput:   ti,
 		textarea:    ta,
 		help:        help.New(),
+		selectIndex: -1,
 	}
 }
 
@@ -159,23 +165,37 @@ func updateList(m Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textinput.Focus()
 
 		case key.Matches(msg, ListKeyMap.New):
-            if len(m.choices) > 0 {
-    			m.choices = append(m.choices[:m.choiceIndex+1], append([]Choice{{Title: "", Subtitle: ""}}, m.choices[m.choiceIndex+1:]...)...)
-    			m.choiceIndex++
-            } else {
-                m.choices = append(m.choices, Choice{Title: "", Subtitle: ""})
-            }
+			if len(m.choices) > 0 {
+				m.choices = append(m.choices[:m.choiceIndex+1], append([]Choice{{Title: "", Subtitle: ""}}, m.choices[m.choiceIndex+1:]...)...)
+				m.choiceIndex++
+			} else {
+				m.choices = append(m.choices, Choice{Title: "", Subtitle: ""})
+			}
 
 		case key.Matches(msg, ListKeyMap.Delete):
 			if len(m.choices) < 1 {
-                break
+				break
 			}
 
-            m.choices = append(m.choices[:m.choiceIndex], m.choices[m.choiceIndex+1:]...)
+			if m.selectIndex == -1 {
+				m.choices = append(m.choices[:m.choiceIndex], m.choices[m.choiceIndex+1:]...)
+			} else {
+				selectStart, selectEnd := min(m.choiceIndex, m.selectIndex), max(m.choiceIndex, m.selectIndex)
+				m.choices = append(m.choices[:selectStart], m.choices[selectEnd+1:]...)
+				m.choiceIndex = selectStart
+				m.selectIndex = -1
+			}
 
-            if m.choiceIndex >= len(m.choices) {
-                m.choiceIndex = len(m.choices) - 1
-            }
+			if m.choiceIndex >= len(m.choices) {
+				m.choiceIndex = len(m.choices) - 1
+			}
+
+		case key.Matches(msg, ListKeyMap.Select):
+			if m.selectIndex == -1 {
+				m.selectIndex = m.choiceIndex
+			} else {
+				m.selectIndex = -1
+			}
 
 		case key.Matches(msg, ListKeyMap.Exit):
 			return m, tea.Quit
@@ -205,7 +225,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func viewList(m Model) string {
 	str := "\n"
 
+	selectStart, selectEnd := min(m.choiceIndex, m.selectIndex), max(m.choiceIndex, m.selectIndex)
+
 	for i, choice := range m.choices {
+		selected := false
+		if m.selectIndex != -1 {
+			if i >= selectStart && i <= selectEnd {
+				selected = true
+			}
+		}
 		renderedTitle := choice.Title
 		if renderedTitle == "" {
 			renderedTitle = "Untitled"
@@ -216,29 +244,39 @@ func viewList(m Model) string {
 		}
 
 		if m.choiceIndex == i {
-			str += listItemSelectedTitle.Render(renderedTitle) + "\n"
-			str += listItemSelectedSubtitle.Render(renderedSubtitle) + "\n"
+			if selected {
+				str += listItemHighlightSelectedTitle.Render(renderedTitle) + "\n"
+				str += listItemHighlightSelectedSubtitle.Render(renderedSubtitle) + "\n"
+			} else {
+				str += listItemSelectedTitle.Render(renderedTitle) + "\n"
+				str += listItemSelectedSubtitle.Render(renderedSubtitle) + "\n"
+			}
 		} else {
-			str += listItemTitle.Render(renderedTitle) + "\n"
-			str += listItemSubtitle.Render(renderedSubtitle) + "\n"
+			if selected {
+				str += listItemHighlightTitle.Render(renderedTitle) + "\n"
+				str += listItemHighlightSubtitle.Render(renderedSubtitle) + "\n"
+			} else {
+				str += listItemTitle.Render(renderedTitle) + "\n"
+				str += listItemSubtitle.Render(renderedSubtitle) + "\n"
+			}
 		}
 	}
-    str = li.NewStyle().Height(m.viewport.Height).Render(str)
-    helpStr := li.NewStyle().Width(m.viewport.Width).Render(m.help.FullHelpView(ListKeyMap.FullHelp()))
-    str = li.JoinHorizontal(li.Bottom, str, helpStr)
-    return str
+	str = li.NewStyle().Height(m.viewport.Height).Render(str)
+	helpStr := li.NewStyle().Width(m.viewport.Width).Render(m.help.FullHelpView(ListKeyMap.FullHelp()))
+	str = li.JoinHorizontal(li.Bottom, str, helpStr)
+	return str
 }
 
 func viewNote(m Model) string {
 	str := ""
 	str += m.textinput.View() + "\n\n\n"
-    str1_5 := m.textarea.View() + "\n"
-    str += str1_5
-    helpStr := li.NewStyle().Width(m.viewport.Width).Render(m.help.FullHelpView(NoteKeyMap.FullHelp()))
-    str = li.PlaceHorizontal(m.viewport.Width, li.Center, str)
+	str1_5 := m.textarea.View() + "\n"
+	str += str1_5
+	helpStr := li.NewStyle().Width(m.viewport.Width).Render(m.help.FullHelpView(NoteKeyMap.FullHelp()))
+	str = li.PlaceHorizontal(m.viewport.Width, li.Center, str)
 	str = li.PlaceVertical(m.viewport.Height, li.Center, str)
-    str = li.JoinVertical(li.Bottom, str, helpStr)
-    return str
+	str = li.JoinVertical(li.Bottom, str, helpStr)
+	return str
 }
 
 func (m Model) View() string {
